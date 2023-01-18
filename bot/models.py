@@ -2,6 +2,11 @@ from django.db import models
 
 
 class User(models.Model):
+
+    class Meta:
+        verbose_name = 'Клиент'
+        verbose_name_plural = 'Клиенты'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=50
@@ -24,6 +29,11 @@ class User(models.Model):
         default=0
     )
 
+    access = models.BooleanField(
+        verbose_name='Согласие на обработку персональных данных',
+        default=False
+    )
+
     admin = models.BooleanField(
         verbose_name='Администратор',
         default=False
@@ -31,6 +41,11 @@ class User(models.Model):
 
 
 class Florist(models.Model):
+
+    class Meta:
+        verbose_name = 'Флорист'
+        verbose_name_plural = 'Флористы'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=30
@@ -42,6 +57,11 @@ class Florist(models.Model):
 
 
 class Courier(models.Model):
+
+    class Meta:
+        verbose_name = 'Курьер'
+        verbose_name_plural = 'Курьеры'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=30
@@ -53,6 +73,11 @@ class Courier(models.Model):
 
 
 class Flower(models.Model):
+
+    class Meta:
+        verbose_name = 'Букет'
+        verbose_name_plural = 'Букеты'
+
     title = models.CharField(
         verbose_name='Название букета',
         max_length=30
@@ -89,6 +114,11 @@ class Flower(models.Model):
 
 
 class Order(models.Model):
+
+    class Meta:
+        verbose_name = 'Заказ'
+        verbose_name_plural = 'Заказы'
+
     user = models.ForeignKey(
         User,
         related_name='user_orders',
