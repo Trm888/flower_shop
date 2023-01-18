@@ -76,7 +76,8 @@ class Flower(models.Model):
         Florist,
         related_name='florists',
         verbose_name='Флорист',
-        on_delete=models.CASCADE
+        on_delete=models.SET_NULL,
+        null=True
     )
 
     price = models.DecimalField(
@@ -99,14 +100,16 @@ class Order(models.Model):
         Flower,
         related_name='ordered_flowers',
         verbose_name='Букет',
-        on_delete=models.CASCADE
+        on_delete=models.SET_NULL,
+        null=True
     )
 
     courier = models.ForeignKey(
         Courier,
         related_name='couriers',
         verbose_name='Курьер',
-        on_delete=models.CASCADE
+        on_delete=models.SET_NULL,
+        null=True
     )
 
     address = models.CharField(
