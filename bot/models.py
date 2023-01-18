@@ -7,6 +7,9 @@ class User(models.Model):
         verbose_name = 'Клиент'
         verbose_name_plural = 'Клиенты'
 
+    def __str__(self):
+        return f'{self.full_name} (id: {self.id})'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=50
@@ -14,18 +17,18 @@ class User(models.Model):
 
     chat_id = models.CharField(
         verbose_name='ID TG CHAT',
-        max_length=30
+        max_length=10
     )
 
     phone_number = models.CharField(
         verbose_name='Номер телефона',
-        max_length=30
+        max_length=12
     )
 
     balance = models.DecimalField(
         verbose_name='Баланс пользователя',
         decimal_places=2,
-        max_digits=5,
+        max_digits=8,
         default=0
     )
 
@@ -46,6 +49,9 @@ class Florist(models.Model):
         verbose_name = 'Флорист'
         verbose_name_plural = 'Флористы'
 
+    def __str__(self):
+        return f'{self.full_name} (id: {self.id})'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=30
@@ -62,13 +68,16 @@ class Courier(models.Model):
         verbose_name = 'Курьер'
         verbose_name_plural = 'Курьеры'
 
+    def __str__(self):
+        return f'{self.full_name} (id: {self.id})'
+
     full_name = models.CharField(
         verbose_name='Полное имя',
         max_length=30
     )
     chat_id = models.CharField(
         verbose_name='ID TG CHAT',
-        max_length=30
+        max_length=10
     )
 
 
@@ -77,6 +86,9 @@ class Flower(models.Model):
     class Meta:
         verbose_name = 'Букет'
         verbose_name_plural = 'Букеты'
+
+    def __str__(self):
+        return f'{self.title} (id: {self.id})'
 
     title = models.CharField(
         verbose_name='Название букета',
@@ -108,7 +120,7 @@ class Flower(models.Model):
     price = models.DecimalField(
         verbose_name='Цена букета',
         decimal_places=2,
-        max_digits=5,
+        max_digits=8,
         default=0
     )
 
@@ -118,6 +130,9 @@ class Order(models.Model):
     class Meta:
         verbose_name = 'Заказ'
         verbose_name_plural = 'Заказы'
+
+    def __str__(self):
+        return f'Заказ {self.user.full_name} (id: {self.id})'
 
     user = models.ForeignKey(
         User,
@@ -153,5 +168,5 @@ class Order(models.Model):
 
     count = models.IntegerField(
         verbose_name='Кол-во букетов',
-        default=0
+        default=1
     )
