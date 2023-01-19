@@ -117,6 +117,11 @@ class Flower(models.Model):
         null=True
     )
 
+    category = models.CharField(
+        verbose_name='Категория букета',
+        max_length=30
+    )
+
     price = models.DecimalField(
         verbose_name='Цена букета',
         decimal_places=2,
