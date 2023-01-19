@@ -1,4 +1,7 @@
 Django==4.1.5
 python-dotenv==0.21.0
-glob2==0.7
 Pillow==9.4.0
+phonenumbers==8.13.4
+aiogram==2.24
+glob2==0.7
+
