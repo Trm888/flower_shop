@@ -11,18 +11,20 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from django.core.management import BaseCommand
+from bot.models import User, Order, Flower
 from dotenv import load_dotenv
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
-events = ['День рождения', 'Свадьба', 'Восьмое марта', 'Рождение ребенка']
+events = ['День рождение', 'Свадьба', '8 марта', 'Рождение ребенка']
 
 budgets = {
-    'До 1000р': range(1000),
-    'До 5000р': range(5000),
-    'До 10000р': range(10000),
-    'Более 10000р': range(10001, 300000)
+    'До 1000р': 1000,
+    'До 5000р': 5000,
+    'До 10000р': 10000,
+    'Более 10000р': 10001
 }
 catalog = {
     'compositions': {
@@ -113,10 +115,11 @@ class Command(BaseCommand):
                 ]
             )
 
-        cycle_pfilepath = cycle(catalog.items())
-
         @dp.message_handler(commands="start", state="*")
         async def flower_start(message: types.Message):
+            print(message)
+            user, created_user = User.objects.get_or_create(chat_id=message.chat.id)
+            print(user, created_user)
             await message.answer("<b>Добро пожаловать! Вас приветствует бот для заказа букетов\n"
                                  "К какому событию готовимся? Выберите один из вариантов</b>",
                                  reply_markup=get_main_keyboard())
@@ -137,17 +140,44 @@ class Command(BaseCommand):
         async def get_budget(message: types.Message, state: FSMContext):
             await state.update_data(chosen_price=budgets[message.text])
             await message.answer("<b>Теперь выберем букет</b>")
+            user_data = await state.get_data()
+            flower_catalog = dict()
+            print(user_data)
+
+            if user_data['chosen_price'] >= 10001:
+                flowers = Flower.objects.filter(price__gte=user_data['chosen_price'], category=user_data['chosen_event'])
+                for flower_number, flower_content in enumerate(flowers):
+                    flower_catalog[f'flower-{flower_number}'] = {
+                        'flower_id': flower_content.id,
+                        'filepath': flower_content.image,
+                        'caption': flower_content.description,
+                        'price': flower_content.price,
+                        'event': user_data['chosen_event']
+                    }
+            else:
+                flowers = Flower.objects.filter(price__lte=user_data['chosen_price'], category=user_data['chosen_event'])
+                for flower_number, flower_content in enumerate(flowers):
+                    flower_catalog[f'flower-{flower_number}'] = {
+                        'flower_id': flower_content.id,
+                        'filepath': flower_content.image,
+                        'caption': flower_content.description,
+                        'price': flower_content.price,
+                        'event': user_data['chosen_event']
+                    }
+
+            print(flower_catalog)
+
 
             # for budget in get_budgets_filtered(evnet=user_data['chosen_event'], #Требуется функция фильтрации букета по двум параметрам
             #                                    price=user_data['chosen_price']):
             #     keyboard.insert(budget)
 
-            next_bouquet = next(cycle_pfilepath)
-            await bot.send_photo(message.from_user.id, photo=open(f'img/{dict(next_bouquet[1])["filepath"]}', 'rb'),
-                                 caption=f'{dict(next_bouquet[1])["caption"]},'
-                                         f' цена: {dict(next_bouquet[1])["price"]}',
-                                 reply_markup=get_inline_keyboard(next_bouquet))
-            await Global.bouquet.set()
+            # next_bouquet = next(cycle_pfilepath)
+            # await bot.send_photo(message.from_user.id, photo=open(dict(next_bouquet[1])["filepath"], 'rb'),
+            #                      caption=f'{dict(next_bouquet[1])["caption"]},'
+            #                              f' цена: {dict(next_bouquet[1])["price"]}',
+            #                      reply_markup=get_inline_keyboard(next_bouquet))
+            # await Global.bouquet.set()
 
         @dp.callback_query_handler(text="Следующий букет", state=Global.bouquet)
         async def get_next(message: types.Message):
