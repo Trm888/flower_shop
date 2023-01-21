@@ -9,10 +9,11 @@ from aiogram import types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from django.core.management import BaseCommand
-from bot.models import User, Order, Flower
 from dotenv import load_dotenv
+
+from bot.models import User, Flower
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -26,33 +27,7 @@ budgets = {
     'До 10000р': 10000,
     'Более 10000р': 10001
 }
-catalog = {
-    'compositions': {
-        'filepath': "3137.jpg",
-        'caption': 'Этот букет несет в себе всю нежность ваших чувств и не способен оставить равнодушных '
-                   'ни одного сердца!',
-        'price': 500,
-        'event': 'свадьба'
-    },
-    'compositions1': {
-        'filepath': "586e0d6adfade_30.jpg",
-        'caption': 'Этот букет несет в себе еще что-то',
-        'price': 6000,
-        'event': 'рождение ребенка'
-    },
-    'compositions2': {
-        'filepath': "13---_enl.jpg",
-        'caption': 'Этот букет несет счастье',
-        'price': 1500,
-        'event': 'день рождения'
-    },
-    'compositions3': {
-        'filepath': "img-2122032.jpg",
-        'caption': 'Этот букет несет в себе растраты',
-        'price': 11900,
-        'event': 'восьмое марта'
-    },
-}
+
 
 # other functions
 def get_valid_phone(input_number: str):
@@ -64,9 +39,35 @@ def get_valid_phone(input_number: str):
     except phonenumbers.NumberParseException:
         print("Номер введен не верно, введите номер в формате \"+79876665544")
 
+
+def get_filter_flower(price=None, event=None):
+    flower_catalog = dict()
+    if price >= 10001:
+        flowers = Flower.objects.filter(price__gte=price, category=event)
+        for flower_number, flower_content in enumerate(flowers):
+            flower_catalog[f'flower-{flower_number}'] = {
+                'flower_id': flower_content.id,
+                'filepath': flower_content.image,
+                'caption': flower_content.description,
+                'price': flower_content.price,
+                'event': event
+            }
+    else:
+        flowers = Flower.objects.filter(price__lte=price, category=event)
+        for flower_number, flower_content in enumerate(flowers):
+            flower_catalog[f'flower-{flower_number}'] = {
+                'flower_id': flower_content.id,
+                'filepath': flower_content.image,
+                'caption': flower_content.description,
+                'price': flower_content.price,
+                'event': event
+            }
+    return flower_catalog
+
+
 # keyboards
 def get_main_keyboard():
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=True)
     for event in events:
         keyboard.insert(event)
     return keyboard
@@ -79,17 +80,16 @@ def get_inline_keyboard(next_bouquet):
     inline_keyboard = InlineKeyboardMarkup(row_width=2).add(order_button, next_btn, consultation)
     return inline_keyboard
 
-#States
+
+# States
 class Global(StatesGroup):
     event = State()
-    our_event = State()
     budget = State()
     bouquet = State()
     person_data = State()
     registration_name = State()
     registration_phonenumber = State()
     cancel = State()
-    our_budget = State()
     address_street = State()
     address_number_house = State()
     address_number_flat = State()
@@ -98,6 +98,8 @@ class Global(StatesGroup):
 
 class Command(BaseCommand):
     help = 'Запуск чат-бота'
+    flower_dict_cycle = dict()
+    flower_dict = dict()
 
     def handle(self, *args, **options):
         bot = Bot(BOT_TOKEN, parse_mode='HTML')
@@ -128,7 +130,7 @@ class Command(BaseCommand):
         @dp.message_handler(state=Global.event)
         async def get_event(message: types.Message, state: FSMContext):
             await state.update_data(chosen_event=message.text)
-            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+            keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=True)
             for description, budget in budgets.items():
                 keyboard.insert(description)
             await message.answer("<b>На какой бюджет расчитываем?</b>",
@@ -141,55 +143,29 @@ class Command(BaseCommand):
             await state.update_data(chosen_price=budgets[message.text])
             await message.answer("<b>Теперь выберем букет</b>")
             user_data = await state.get_data()
-            flower_catalog = dict()
-            print(user_data)
-
-            if user_data['chosen_price'] >= 10001:
-                flowers = Flower.objects.filter(price__gte=user_data['chosen_price'], category=user_data['chosen_event'])
-                for flower_number, flower_content in enumerate(flowers):
-                    flower_catalog[f'flower-{flower_number}'] = {
-                        'flower_id': flower_content.id,
-                        'filepath': flower_content.image,
-                        'caption': flower_content.description,
-                        'price': flower_content.price,
-                        'event': user_data['chosen_event']
-                    }
-            else:
-                flowers = Flower.objects.filter(price__lte=user_data['chosen_price'], category=user_data['chosen_event'])
-                for flower_number, flower_content in enumerate(flowers):
-                    flower_catalog[f'flower-{flower_number}'] = {
-                        'flower_id': flower_content.id,
-                        'filepath': flower_content.image,
-                        'caption': flower_content.description,
-                        'price': flower_content.price,
-                        'event': user_data['chosen_event']
-                    }
-
-            print(flower_catalog)
-
-
-            # for budget in get_budgets_filtered(evnet=user_data['chosen_event'], #Требуется функция фильтрации букета по двум параметрам
-            #                                    price=user_data['chosen_price']):
-            #     keyboard.insert(budget)
-
-            # next_bouquet = next(cycle_pfilepath)
-            # await bot.send_photo(message.from_user.id, photo=open(dict(next_bouquet[1])["filepath"], 'rb'),
-            #                      caption=f'{dict(next_bouquet[1])["caption"]},'
-            #                              f' цена: {dict(next_bouquet[1])["price"]}',
-            #                      reply_markup=get_inline_keyboard(next_bouquet))
-            # await Global.bouquet.set()
+            global flower_dict_cycle
+            global flower_dict
+            flower_dict = get_filter_flower(price=user_data['chosen_price'], event=user_data['chosen_event'])
+            flower_dict_cycle = cycle(flower_dict.items())
+            next_bouquet = next(flower_dict_cycle)
+            await bot.send_photo(message.from_user.id, photo=open(f'{dict(next_bouquet[1])["filepath"]}', 'rb'),
+                                 caption=f'{dict(next_bouquet[1])["caption"]},'
+                                         f' цена: {dict(next_bouquet[1])["price"]}',
+                                 reply_markup=get_inline_keyboard(next_bouquet))
+            await Global.bouquet.set()
 
         @dp.callback_query_handler(text="Следующий букет", state=Global.bouquet)
         async def get_next(message: types.Message):
-            next_bouquet = next(cycle_pfilepath)
-            await bot.send_photo(message.from_user.id, photo=open(f'img/{dict(next_bouquet[1])["filepath"]}', 'rb'),
+            global flower_dict_cycle
+            next_bouquet = next(flower_dict_cycle)
+            await bot.send_photo(message.from_user.id, photo=open(f'{dict(next_bouquet[1])["filepath"]}', 'rb'),
                                  caption=f'{dict(next_bouquet[1])["caption"]},'
                                          f' цена: {dict(next_bouquet[1])["price"]}',
                                  reply_markup=get_inline_keyboard(next_bouquet))
             await Global.bouquet.set()
 
         @dp.callback_query_handler(text="консультация", state=Global.bouquet)
-        async def get_event(callback: types.CallbackQuery, state: FSMContext) -> None:
+        async def get_access_with_consult(callback: types.CallbackQuery, state: FSMContext) -> None:
             await state.update_data(chosen_bouquet=callback.data)
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Согласен", "Не согласен")
@@ -201,9 +177,10 @@ class Command(BaseCommand):
 
         @dp.callback_query_handler(lambda callback_query: callback_query, state=Global.bouquet)
         async def get_access(callback: types.CallbackQuery, state: FSMContext) -> None:
+            global flower_dict
             await state.update_data(chosen_bouquet=callback.data)
             await state.update_data(bouquet_photo_id=callback.message["photo"][0]["file_id"])
-            await state.update_data(bouquet_price=catalog[f'{callback.data}']['price'])
+            await state.update_data(bouquet_price=flower_dict[callback.data]['price'])
             user_data = await state.get_data()
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Согласен", "Не согласен")
@@ -283,8 +260,8 @@ class Command(BaseCommand):
             keyboard.add("Главное меню")
             user_data = await state.get_data()
             if user_data.get('bouquet_photo_id'):
-                await message.reply(
-                    'Ваш заказ создан')
+                await message.answer(
+                    '<b>Ваш заказ создан</b>')
                 await bot.send_photo(chat_id=message.from_user.id, photo=user_data['bouquet_photo_id'],
                                      caption=f'<b>Букет: {user_data["chosen_bouquet"]}\n'
                                              f'Событие: {user_data["chosen_event"]}\n'
@@ -300,8 +277,8 @@ class Command(BaseCommand):
                 await asyncio.sleep(3)
                 await flower_start(message)
             else:
-                await message.reply(
-                    'Ваш заказ создан, в ближайшее время с вами свяжется флорист.')
+                await message.answer(
+                    '<b>Ваш заказ создан, в ближайшее время с вами свяжется флорист.</b>')
                 await bot.send_message(chat_id=message.from_user.id, text=
                 f'<b>Букет: {user_data["chosen_bouquet"]}\n'
                 f'Событие: {user_data["chosen_event"]}\n'
