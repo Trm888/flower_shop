@@ -1,7 +1,7 @@
 import asyncio
 import os
-from itertools import cycle
 from datetime import datetime
+from itertools import cycle
 
 import phonenumbers
 from aiogram import Bot, Dispatcher
@@ -46,7 +46,7 @@ def get_filter_flower(price=None, event=None):
     flowers = Flower.objects.filter(price__lte=price, category=event)
     if price >= 10001:
         flowers = Flower.objects.filter(price__gte=price, category=event)
-    
+
     for flower_number, flower_content in enumerate(flowers):
         flower_catalog[f'flower-{flower_number}'] = {
             'flower_id': flower_content.id,
@@ -112,7 +112,6 @@ class Command(BaseCommand):
 
         @dp.message_handler(commands="start", state="*")
         async def flower_start(message: types.Message):
-            print(message)
             user, created_user = User.objects.get_or_create(chat_id=message.chat.id)
             print(user, created_user)
             await message.answer("<b>Добро пожаловать! Вас приветствует бот для заказа букетов\n"
@@ -123,6 +122,7 @@ class Command(BaseCommand):
         @dp.message_handler(state=Global.event)
         async def get_event(message: types.Message, state: FSMContext):
             await state.update_data(chosen_event=message.text)
+            await state.update_data(user_id=message.from_user.id)
             keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=True)
             for description, budget in budgets.items():
                 keyboard.insert(description)
@@ -162,28 +162,44 @@ class Command(BaseCommand):
             await state.update_data(chosen_bouquet=callback.data)
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Согласен", "Не согласен")
-            await callback.message.answer(
-                "<b>Ваша заявка будет передана флористу, для обсуждения деталей вам требуется "
-                "зарегистрироваться. "
-                "Даю согласия на обработку персональных данных?</b>", reply_markup=keyboard)
-            await Global.person_data.set()
+            user = User.objects.get(chat_id=callback['from'].id)
+            if user.access:
+                await callback.message.answer(
+                    'Введите своё имя и фамилию:',
+                    reply_markup=types.ReplyKeyboardRemove()
+                )
+                await Global.registration_name.set()
+            else:
+                await callback.message.answer(
+                    "<b>Ваша заявка будет передана флористу, для обсуждения деталей вам требуется "
+                    "зарегистрироваться. "
+                    "Даю согласия на обработку персональных данных?</b>", reply_markup=keyboard)
+                await Global.person_data.set()
 
         @dp.callback_query_handler(lambda callback_query: callback_query, state=Global.bouquet)
         async def get_access(callback: types.CallbackQuery, state: FSMContext) -> None:
+
             global flower_dict
             print(callback['from'].id)
+            user = User.objects.get(chat_id=callback['from'].id)
             await state.update_data(chosen_bouquet=callback.data)
             await state.update_data(bouquet_photo_id=callback.message["photo"][0]["file_id"])
             await state.update_data(bouquet_price=flower_dict[callback.data]['price'])
             await state.update_data(bouquet_id=flower_dict[callback.data]['flower_id'])
-            user_data = await state.get_data()
-            print(user_data)
-            keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            keyboard.add("Согласен", "Не согласен")
-            await callback.message.answer(
-                f"Вы выбрали {user_data['chosen_bouquet']}. Для продолжения заказа требуется зарегистрироваться."
-                f"Даю согласия на обработку персональных данных?", reply_markup=keyboard)
-            await Global.person_data.set()
+            if user.access:
+                await callback.message.answer(
+                    'Введите своё имя и фамилию:',
+                    reply_markup=types.ReplyKeyboardRemove()
+                )
+                await Global.registration_name.set()
+            else:
+                user_data = await state.get_data()
+                keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+                keyboard.add("Согласен", "Не согласен")
+                await callback.message.answer(
+                    f"Вы выбрали {user_data['chosen_bouquet']}. Для продолжения заказа требуется зарегистрироваться."
+                    f"Даю согласия на обработку персональных данных?", reply_markup=keyboard)
+                await Global.person_data.set()
 
         @dp.message_handler(state=Global.person_data)
         async def register_user(message: types.Message, state: FSMContext):
@@ -255,18 +271,20 @@ class Command(BaseCommand):
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Главное меню")
             user_data = await state.get_data()
-            flower_id = user_data['bouquet_id']
+
             user = User.objects.filter(chat_id=message['from'].id).update(access=True)
             courier = Courier.objects.get()
             user_id = User.objects.filter(chat_id=message['from'].id)
-            flower_obj = Flower.objects.get(pk=flower_id)
+
             user_address = f'{user_data["address_street"]}, {user_data["address_number_house"]}, {user_data["address_number_driveway"]}, {user_data["address_number_flat"]}'
             currentDateAndTime = datetime.now()
             print(currentDateAndTime)
-            # print(user_id[0]['id'])
-            created_order = Order.objects.create(user=user_id[0], flower=flower_obj, courier=courier, address = user_address, delivery_date = currentDateAndTime)
-            print(created_order)
             if user_data.get('bouquet_photo_id'):
+                flower_id = user_data['bouquet_id']
+                flower_obj = Flower.objects.get(pk=flower_id)
+                created_order = Order.objects.create(user=user_id[0], flower=flower_obj, courier=courier,
+                                                     address=user_address, delivery_date=currentDateAndTime)
+                print(created_order)
                 await message.answer(
                     '<b>Ваш заказ создан</b>')
                 await bot.send_photo(chat_id=message.from_user.id, photo=user_data['bouquet_photo_id'],
@@ -284,6 +302,9 @@ class Command(BaseCommand):
                 await asyncio.sleep(3)
                 await flower_start(message)
             else:
+                created_order = Order.objects.create(user=user_id[0], flower=None, courier=courier,
+                                                     address=user_address, delivery_date=currentDateAndTime)
+
                 await message.answer(
                     '<b>Ваш заказ создан, в ближайшее время с вами свяжется флорист.</b>')
                 await bot.send_message(chat_id=message.from_user.id, text=
