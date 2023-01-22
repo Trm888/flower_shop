@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from bot.models import Florist, Flower
+from bot.models import Florist, Flower, Courier
 import random
 import glob
 
@@ -7,6 +7,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         db_seeder_florist()
         db_seeder_flower()
+        db_seeder_courier()
+
+def db_seeder_courier():
+    courier = Courier.objects.create(
+        full_name = 'Алла Пугачева',
+        chat_id = '1234493213'
+    )
 
 def db_seeder_florist():
     florist = Florist.objects.create(

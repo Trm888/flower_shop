@@ -143,7 +143,8 @@ class Order(models.Model):
         User,
         related_name='user_orders',
         verbose_name='Покупатель',
-        on_delete=models.CASCADE
+        on_delete=models.SET_NULL,
+        null=True
     )
 
     flower = models.ForeignKey(
