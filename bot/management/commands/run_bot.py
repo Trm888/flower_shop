@@ -1,6 +1,7 @@
 import asyncio
 import os
 from itertools import cycle
+from datetime import datetime
 
 import phonenumbers
 from aiogram import Bot, Dispatcher
@@ -13,7 +14,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from django.core.management import BaseCommand
 from dotenv import load_dotenv
 
-from bot.models import User, Flower
+from bot.models import User, Flower, Order, Courier
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -42,26 +43,18 @@ def get_valid_phone(input_number: str):
 
 def get_filter_flower(price=None, event=None):
     flower_catalog = dict()
+    flowers = Flower.objects.filter(price__lte=price, category=event)
     if price >= 10001:
         flowers = Flower.objects.filter(price__gte=price, category=event)
-        for flower_number, flower_content in enumerate(flowers):
-            flower_catalog[f'flower-{flower_number}'] = {
-                'flower_id': flower_content.id,
-                'filepath': flower_content.image,
-                'caption': flower_content.description,
-                'price': flower_content.price,
-                'event': event
-            }
-    else:
-        flowers = Flower.objects.filter(price__lte=price, category=event)
-        for flower_number, flower_content in enumerate(flowers):
-            flower_catalog[f'flower-{flower_number}'] = {
-                'flower_id': flower_content.id,
-                'filepath': flower_content.image,
-                'caption': flower_content.description,
-                'price': flower_content.price,
-                'event': event
-            }
+    
+    for flower_number, flower_content in enumerate(flowers):
+        flower_catalog[f'flower-{flower_number}'] = {
+            'flower_id': flower_content.id,
+            'filepath': flower_content.image,
+            'caption': flower_content.description,
+            'price': flower_content.price,
+            'event': event
+        }
     return flower_catalog
 
 
@@ -74,7 +67,7 @@ def get_main_keyboard():
 
 
 def get_inline_keyboard(next_bouquet):
-    order_button = InlineKeyboardButton(f'Заказать {next_bouquet[0]}', callback_data=f'{next_bouquet[0]}')
+    order_button = InlineKeyboardButton(f'Заказать {next_bouquet[0]}', callback_data=next_bouquet[0])
     next_btn = InlineKeyboardButton(text="Следующий букет", callback_data="Следующий букет")
     consultation = InlineKeyboardButton(text="Свой вариант/консультация", callback_data="консультация")
     inline_keyboard = InlineKeyboardMarkup(row_width=2).add(order_button, next_btn, consultation)
@@ -178,10 +171,13 @@ class Command(BaseCommand):
         @dp.callback_query_handler(lambda callback_query: callback_query, state=Global.bouquet)
         async def get_access(callback: types.CallbackQuery, state: FSMContext) -> None:
             global flower_dict
+            print(callback['from'].id)
             await state.update_data(chosen_bouquet=callback.data)
             await state.update_data(bouquet_photo_id=callback.message["photo"][0]["file_id"])
             await state.update_data(bouquet_price=flower_dict[callback.data]['price'])
+            await state.update_data(bouquet_id=flower_dict[callback.data]['flower_id'])
             user_data = await state.get_data()
+            print(user_data)
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Согласен", "Не согласен")
             await callback.message.answer(
@@ -259,6 +255,17 @@ class Command(BaseCommand):
             keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keyboard.add("Главное меню")
             user_data = await state.get_data()
+            flower_id = user_data['bouquet_id']
+            user = User.objects.filter(chat_id=message['from'].id).update(access=True)
+            courier = Courier.objects.get()
+            user_id = User.objects.filter(chat_id=message['from'].id)
+            flower_obj = Flower.objects.get(pk=flower_id)
+            user_address = f'{user_data["address_street"]}, {user_data["address_number_house"]}, {user_data["address_number_driveway"]}, {user_data["address_number_flat"]}'
+            currentDateAndTime = datetime.now()
+            print(currentDateAndTime)
+            # print(user_id[0]['id'])
+            created_order = Order.objects.create(user=user_id[0], flower=flower_obj, courier=courier, address = user_address, delivery_date = currentDateAndTime)
+            print(created_order)
             if user_data.get('bouquet_photo_id'):
                 await message.answer(
                     '<b>Ваш заказ создан</b>')
