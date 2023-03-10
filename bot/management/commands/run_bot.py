@@ -1,7 +1,9 @@
 import asyncio
 import os
+import re
 from datetime import datetime
 from itertools import cycle
+from typing import Match
 
 import phonenumbers
 from aiogram import Bot, Dispatcher
@@ -9,6 +11,7 @@ from aiogram import executor
 from aiogram import types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Filter
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from django.core.management import BaseCommand
@@ -76,6 +79,7 @@ def get_inline_keyboard(next_bouquet):
 
 # States
 class Global(StatesGroup):
+    wait_registration_phone = State()
     event = State()
     budget = State()
     bouquet = State()
@@ -217,19 +221,41 @@ class Command(BaseCommand):
 
         # Регистрация
 
-        @dp.message_handler(lambda message: message.text.count(' ') < 1 or message.text.count(' ') > 2,
-                            state=Global.registration_name)
-        async def get_valid_name(message: types.Message):
-            await message.reply(
-                'Введите правильное имя')
+        class FullNameCheck(Filter):
+            """Проверка на имя и фамилию"""
+            key = 'is_full_name'
+
+            pattern = re.compile(r'^(?:[A-ZА-Я][a-zа-я]+ ){1,2}[A-ZА-Я][a-zа-я]+$')
+            async def check(self, msg: types.Message):
+                return self.pattern.match(msg.text)
 
         @dp.message_handler(state=Global.registration_name)
-        async def get_name(message: types.Message, state: FSMContext):
-            await state.update_data(full_name=message.text)
-            await message.answer(
-                'Введите свой номер телефона:')
+        async def get_valid_name(message: types.Message, state: FSMContext):
+            check_name = await FullNameCheck().check(message)
+            if check_name:
+                await state.update_data(full_name=message.text)
+                await message.answer(
+                    'Введите свой номер телефона:')
+                await Global.registration_phonenumber.set()
+            else:
+                await message.answer(
+                    'Введите правильное имя')
+                await Global.registration_name.set()
 
-            await Global.registration_phonenumber.set()
+
+        # @dp.message_handler(lambda message: message.text.count(' ') < 1 or message.text.count(' ') > 2,
+        #                     state=Global.registration_name)
+        # async def get_valid_name(message: types.Message):
+        #     await message.reply(
+        #         'Введите правильное имя')
+
+        # @dp.message_handler(state=Global.wait_registration_phone)
+        # async def get_name(message: types.Message, state: FSMContext):
+        #     await state.update_data(full_name=message.text)
+        #     await message.answer(
+        #         'Введите свой номер телефона:')
+        #
+        #     await Global.registration_phonenumber.set()
 
         @dp.message_handler(state=Global.registration_phonenumber)
         async def get_phone_number(message: types.Message, state: FSMContext):
